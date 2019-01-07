@@ -1,2 +1,0 @@
-model_checkpoint_path: "my_flower_model"
-all_model_checkpoint_paths: "my_flower_model"
