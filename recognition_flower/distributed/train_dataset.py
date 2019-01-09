@@ -22,13 +22,10 @@ flags.DEFINE_string('dataset_path',  '../flower_photos_labeled',
 flags.DEFINE_string('tfrecords_path',  './train_v1.tfrecord',
                     """Needs to provide the tf records file for training.(train_v2~1.15G ,train_v1~38M)""")
 
-flags.DEFINE_string('model_path',  './serialized_init/my_flower_model',
+flags.DEFINE_string('checkpoint_dir',  './output/checkpoint_dir/',
                     """Needs to provide the model path (checkpoint,meta) in training.""")
 
-flags.DEFINE_string('checkpoint_dir',  '../output/checkpoint_dir/',
-                    """Needs to provide the model path (checkpoint,meta) in training.""")
-
-flags.DEFINE_string('summaries_dir',  '../output/events/',
+flags.DEFINE_string('summaries_dir',  './output/events/',
                     """Needs to provide the summary output dir in training.""")
 
 flags.DEFINE_integer('train_steps', 10, 'Number of training steps to perform')
@@ -155,13 +152,13 @@ def main(unused_argv):
 
     server = tf.train.Server(cluster, task_type, task_index)
     if task_type == 'ps':
+        os.system("rm -r %s/*" % FLAGS.checkpoint_dir)
         server.join()
 
     with tf.device(tf.train.replica_device_setter(
             cluster=cluster,
             worker_device="/job:worker/task:%d" % task_index)):
         global_step = tf.train.get_or_create_global_step()
-
         x, labels = train_input_fn(FLAGS.tfrecords_path, params)
         logits = inference(x)
         tf.summary.histogram('logits histogram', logits)
@@ -183,25 +180,21 @@ def main(unused_argv):
             saver_total = tf.train.Saver()
             merged = tf.summary.merge_all()
 
-        hooks = [tf.train.StopAtStepHook(last_step=params['train_steps']),
-                 tf.train.CheckpointSaverHook(checkpoint_dir=FLAGS.checkpoint_dir,
-                                              save_steps=10,
+        hooks = [tf.train.CheckpointSaverHook(checkpoint_dir=FLAGS.checkpoint_dir,
+                                              save_steps=2,
                                               saver=saver_total),
-                 tf.train.SummarySaverHook(save_steps=50, summary_op=merged,
+                 tf.train.SummarySaverHook(save_steps=2, summary_op=merged,
                                            output_dir=FLAGS.summaries_dir + str(FLAGS.model_version) + '/train')]
 
         with tf.train.MonitoredTrainingSession(master=server.target,
                                                is_chief=is_chief,
                                                hooks=hooks) as mon_sess:
             mon_sess.run(init)
-            local_step = 0
-            while not mon_sess.should_stop():
-                _, batch_loss, g_step = mon_sess.run([train_step, loss, global_step])
-                local_step += 1
-                if local_step % 10 == 0:
-                    print('Worker %d: training step %d done (global step:%d), loss is %f' % (task_index,
-                                                                                             local_step, g_step,
-                                                                                             batch_loss))
+            step = 0
+            while not mon_sess.should_stop() and step < params['train_steps']:
+                _, batch_loss, step = mon_sess.run([train_step, loss, global_step])
+                if step % 2 == 0:
+                    print('Worker %d: training step %d done , loss is %f' % (task_index, step, batch_loss))
             print('finished training')
 
 
