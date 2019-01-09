@@ -22,7 +22,7 @@ import glob
 
 flags = tf.app.flags
 
-flags.DEFINE_string('output_dir', '../output/models',
+flags.DEFINE_string('output_dir', './output/models',
                     """Directory where to export inference model.""")
 
 flags.DEFINE_integer('model_version', 1,
@@ -31,22 +31,13 @@ flags.DEFINE_integer('model_version', 1,
 flags.DEFINE_string('dataset_path',  '../flower_photos_labeled',
                     """Needs to provide the dataset_path  as in training.""")
 
-flags.DEFINE_string('model_path',  './serialized_init/my_flower_model',
+flags.DEFINE_string('checkpoint_dir',  './output/checkpoint_dir/',
                     """Needs to provide the model path (checkpoint,meta) in training.""")
-
-flags.DEFINE_string('checkpoint_dir',  '../output/checkpoint_dir/',
-                    """Needs to provide the model path (checkpoint,meta) in training.""")
-
-flags.DEFINE_string('summaries_dir',  '../output/events/',
-                    """Needs to provide the summary output dir in training.""")
-
 
 FLAGS = flags.FLAGS
 
 flower_classes = os.listdir(FLAGS.dataset_path)
 flower_classes = [name for name in flower_classes if not name.startswith('.')]
-
-
 
 
 def preprocess_image(image_buffer):
@@ -73,6 +64,7 @@ def preprocess_image(image_buffer):
     image = tf.multiply(image, 2.0)
     return image
 
+
 def inference(X,training=True,keep_prob=0.8,n_outputs=5):
     X = tf.reshape(X,[-1,299,299,3], name='X')
     with slim.arg_scope(inception.inception_v3_arg_scope()):
@@ -92,9 +84,9 @@ def inference(X,training=True,keep_prob=0.8,n_outputs=5):
                                                 name='flower_logits')
     return flower_logits
 
+
 def main(argv=None):
     with tf.Graph().as_default():
-        ## 设置输入为序列化输入
         serialized_tf_example = tf.placeholder(tf.string, name='tf_example')
         feature_configs = {
             'image/encoded': tf.FixedLenFeature(
@@ -104,7 +96,6 @@ def main(argv=None):
         jpegs = tf_example['image/encoded']
         image = tf.map_fn(preprocess_image, jpegs, dtype=tf.float32)
 
-        ## 这里以下为预测部分
         X = tf.identity(image)
         logits = inference(X)
         values_flower, indices = tf.nn.top_k(logits,1)
@@ -121,7 +112,6 @@ def main(argv=None):
             if ckpt and ckpt.model_checkpoint_path:
                 saver.restore(sess, ckpt.model_checkpoint_path)
                 print('restored model')
-            ### test for model restore 
             sess.run([classes_flower,class_tensor, values_flower, indices],feed_dict={X:np.zeros([1,299,299,3])})
                      
             # export model  
@@ -129,6 +119,8 @@ def main(argv=None):
             output_path = os.path.join(
                           tf.compat.as_bytes(output_dir),
                           tf.compat.as_bytes(str(FLAGS.model_version)))
+            if os.path.exists(output_path):
+                os.system("rm -r %s" % output_path)
             builder = tf.saved_model.builder.SavedModelBuilder(output_path)
 
             # Build the signature_def_map.
