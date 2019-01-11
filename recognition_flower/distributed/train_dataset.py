@@ -185,10 +185,15 @@ def main(unused_argv):
                                               saver=saver_total),
                  tf.train.SummarySaverHook(save_steps=2, summary_op=merged,
                                            output_dir=FLAGS.summaries_dir + str(FLAGS.model_version) + '/train')]
+        # Filter all connections except that between ps and this worker to avoid hanging issues when
+        # one worker finishes. We are using asynchronous training so there is no need for the workers to communicate.
+        config_proto = tf.ConfigProto(device_filters=['/job:ps', '/job:worker/task:%d' % task_index])
 
         with tf.train.MonitoredTrainingSession(master=server.target,
                                                is_chief=is_chief,
-                                               hooks=hooks) as mon_sess:
+                                               hooks=hooks,
+                                               config=config_proto) as mon_sess:
+
             mon_sess.run(init)
             step = 0
             while not mon_sess.should_stop() and step < params['train_steps']:
