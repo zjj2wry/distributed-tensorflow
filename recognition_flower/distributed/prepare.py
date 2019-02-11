@@ -5,6 +5,15 @@ import numpy as np
 import cv2
 import random
 
+flags = tf.app.flags
+
+flags.DEFINE_string('dataset_path',  '../flower_photos_labeled',
+                    """Needs to provide the dataset_path  as in training.""")
+
+flags.DEFINE_string('tfrecords_path',  './train_v1.tfrecord',
+                    """Needs to provide the tf records file for training.(train_v2~1.15G ,train_v1~38M)""")
+
+FLAGS = flags.FLAGS
 
 def shuffle_data_and_label(files,char_dict):
     files.sort()
@@ -18,7 +27,7 @@ def encode_to_tfrecord(file_path,tfrecord_path,col=None,row=None):
     label_list = os.listdir(file_path)
     label_list = [label for label in label_list if not label.startswith('.')]
     char_dict = dict(zip(label_list, range(len(label_list))))
-
+    print(char_dict)
     files = glob.glob(file_path+'/*/*.jpg')
     data = shuffle_data_and_label(files, char_dict)
     if not os.path.exists(tfrecord_path):
@@ -43,6 +52,10 @@ def encode_to_tfrecord(file_path,tfrecord_path,col=None,row=None):
             writer.write(example.SerializeToString())
     writer.close()
 
-# train_dir = '../flower_photos_labeled/'
-# train_tfrecords_path = './tfrecords/train_v1.tfrecord'
-# encode_to_tfrecord(train_dir,train_tfrecords_path)
+def main(unused_argv):
+    encode_to_tfrecord(FLAGS.dataset_path, FLAGS.tfrecords_path)
+
+if __name__ == '__main__':
+    print("start prepare dataset")
+    tf.app.run()
+    print("finish prepare dataset")

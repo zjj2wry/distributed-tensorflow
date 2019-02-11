@@ -19,7 +19,6 @@ import random
 import json
 import glob
 
-
 flags = tf.app.flags
 
 flags.DEFINE_string('output_dir', './output/models',
@@ -120,7 +119,7 @@ def main(argv=None):
                           tf.compat.as_bytes(output_dir),
                           tf.compat.as_bytes(str(FLAGS.model_version)))
             if os.path.exists(output_path):
-                os.system("rm -r %s" % output_path)
+                os.system("rm -r " + str(output_path, encoding = "utf-8"))
             builder = tf.saved_model.builder.SavedModelBuilder(output_path)
 
             # Build the signature_def_map.

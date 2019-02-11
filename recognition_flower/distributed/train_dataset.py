@@ -6,7 +6,6 @@ import tensorflow as tf
 from tensorflow.contrib.slim.nets import inception
 import tensorflow.contrib.slim as slim
 import json
-import tfrecords_gen
 
 flags = tf.app.flags
 
@@ -15,9 +14,6 @@ flags.DEFINE_integer('model_version', 1,
 
 flags.DEFINE_integer('n_epochs',  1000,
                      """Needs to provide the number of epochs as in training.""")
-
-flags.DEFINE_string('dataset_path',  '../flower_photos_labeled',
-                    """Needs to provide the dataset_path  as in training.""")
 
 flags.DEFINE_string('tfrecords_path',  './train_v1.tfrecord',
                     """Needs to provide the tf records file for training.(train_v2~1.15G ,train_v1~38M)""")
@@ -36,10 +32,6 @@ flags.DEFINE_float('learning_rate', 0.001, 'Learning rate')
 
 
 FLAGS = flags.FLAGS
-
-flower_classes = os.listdir(FLAGS.dataset_path)
-flower_classes = [name for name in flower_classes if not name.startswith('.')]
-
 
 def inference(X,training=True,keep_prob=0.8,n_outputs=5):
     X = tf.reshape(X,[-1,299,299,3], name='X')
@@ -128,10 +120,6 @@ def preprocess_image(image_buffer):
 
 
 def main(unused_argv):
-    print('start encode dataset to tfrecord')
-    tfrecords_gen.encode_to_tfrecord(FLAGS.dataset_path, FLAGS.tfrecords_path)
-    print('finished encode')
-
     # tfjob will pass TF_CONFIG env
     # example:
     # cluster = {'ps': ['172.17.0.9:22221'],
@@ -152,7 +140,8 @@ def main(unused_argv):
 
     server = tf.train.Server(cluster, task_type, task_index)
     if task_type == 'ps':
-        os.system("rm -r %s/*" % FLAGS.checkpoint_dir)
+        if os.path.exists(FLAGS.checkpoint_dir):
+            os.system("rm -r " + FLAGS.checkpoint_dir)
         server.join()
 
     with tf.device(tf.train.replica_device_setter(
@@ -180,20 +169,20 @@ def main(unused_argv):
             saver_total = tf.train.Saver()
             merged = tf.summary.merge_all()
 
+        # Filter all connections except that between ps and this worker to avoid hanging issues when
+        # one worker finishes. We are using asynchronous training so there is no need for the workers to communicate.
+        config_proto = tf.ConfigProto(device_filters = ['/job:ps', '/job:worker/task:%d' % task_index])
+
         hooks = [tf.train.CheckpointSaverHook(checkpoint_dir=FLAGS.checkpoint_dir,
                                               save_steps=2,
                                               saver=saver_total),
                  tf.train.SummarySaverHook(save_steps=2, summary_op=merged,
                                            output_dir=FLAGS.summaries_dir + str(FLAGS.model_version) + '/train')]
-        # Filter all connections except that between ps and this worker to avoid hanging issues when
-        # one worker finishes. We are using asynchronous training so there is no need for the workers to communicate.
-        config_proto = tf.ConfigProto(device_filters=['/job:ps', '/job:worker/task:%d' % task_index])
 
         with tf.train.MonitoredTrainingSession(master=server.target,
                                                is_chief=is_chief,
                                                hooks=hooks,
                                                config=config_proto) as mon_sess:
-
             mon_sess.run(init)
             step = 0
             while not mon_sess.should_stop() and step < params['train_steps']:

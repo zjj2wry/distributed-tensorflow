@@ -198,7 +198,7 @@ def main(argv):
                 tf.compat.as_bytes(str(FLAGS.model_version)))
             print('Exporting trained model to', output_path)
             if os.path.exists(output_path):
-                os.system("rm -r %s" % output_path)
+                os.system("rm -r " + str(output_path, encoding = "utf-8"))
             # Now if the directory of the model everywhere already reports an error,
             # we can modify the code to increase the version of the model.
             builder = tf.saved_model.builder.SavedModelBuilder(output_path)
